@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tic Tac Toe</title>
+<style>
+  :root {
+    --bg: #1a1a2e;
+    --cell: #16213e;
+    --cell-hover: #1f2c52;
+    --x: #ff6b6b;
+    --o: #4ecdc4;
+    --line: #0f3460;
+    --text: #e8e8e8;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    padding: 20px;
+  }
+  h1 { font-weight: 700; letter-spacing: 2px; }
+  .status { font-size: 1.2rem; min-height: 1.5em; font-weight: 600; }
+  .board {
+    display: grid;
+    grid-template-columns: repeat(3, 96px);
+    grid-template-rows: repeat(3, 96px);
+    gap: 8px;
+    background: var(--line);
+    padding: 8px;
+    border-radius: 12px;
+  }
+  .cell {
+    background: var(--cell);
+    border: none;
+    border-radius: 8px;
+    font-size: 3rem;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, transform 0.1s;
+    color: var(--text);
+  }
+  .cell:hover:not(:disabled) { background: var(--cell-hover); }
+  .cell:active:not(:disabled) { transform: scale(0.95); }
+  .cell.x { color: var(--x); }
+  .cell.o { color: var(--o); }
+  .cell.win { background: var(--line); animation: pulse 0.6s ease infinite alternate; }
+  @keyframes pulse { to { filter: brightness(1.6); } }
+  .controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: center; }
+  button.btn {
+    background: var(--line);
+    color: var(--text);
+    border: none;
+    padding: 10px 18px;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    cursor: pointer;
+    font-weight: 600;
+    transition: background 0.15s;
+  }
+  button.btn:hover { background: #144a87; }
+  button.btn.active { background: var(--o); color: #04201d; }
+  .scores { display: flex; gap: 20px; font-size: 0.95rem; }
+  .scores span { font-weight: 700; }
+</style>
+</head>
+<body>
+  <h1>TIC TAC TOE</h1>
+  <div class="status" id="status">X's turn</div>
+  <div class="board" id="board"></div>
+  <div class="scores">
+    <div>X <span id="scoreX" style="color:var(--x)">0</span></div>
+    <div>Draws <span id="scoreD">0</span></div>
+    <div>O <span id="scoreO" style="color:var(--o)">0</span></div>
+  </div>
+  <div class="controls">
+    <button class="btn" id="reset">New Game</button>
+    <button class="btn active" id="mode2p">2 Players</button>
+    <button class="btn" id="modeAI">vs Computer</button>
+  </div>
+
+<script>
+const WINS = [
+  [0,1,2],[3,4,5],[6,7,8], // rows
+  [0,3,6],[1,4,7],[2,5,8], // cols
+  [0,4,8],[2,4,6]          // diagonals
+];
+
+let board, current, gameOver, vsAI;
+const scores = { X: 0, O: 0, D: 0 };
+
+const boardEl = document.getElementById('board');
+const statusEl = document.getElementById('status');
+
+function init() {
+  board = Array(9).fill('');
+  current = 'X';
+  gameOver = false;
+  render();
+  updateStatus();
+}
+
+function render() {
+  boardEl.innerHTML = '';
+  board.forEach((mark, i) => {
+    const cell = document.createElement('button');
+    cell.className = 'cell' + (mark ? ' ' + mark.toLowerCase() : '');
+    cell.textContent = mark;
+    cell.disabled = !!mark || gameOver;
+    cell.addEventListener('click', () => move(i));
+    boardEl.appendChild(cell);
+  });
+}
+
+function move(i) {
+  if (board[i] || gameOver) return;
+  board[i] = current;
+  const result = evaluate(board);
+  render();
+  if (result) return finish(result);
+  current = current === 'X' ? 'O' : 'X';
+  updateStatus();
+  if (vsAI && current === 'O' && !gameOver) {
+    setTimeout(aiMove, 350);
+  }
+}
+
+function finish(result) {
+  gameOver = true;
+  if (result.winner) {
+    scores[result.winner]++;
+    statusEl.textContent = result.winner + ' wins!';
+    result.line.forEach(idx => boardEl.children[idx].classList.add('win'));
+  } else {
+    scores.D++;
+    statusEl.textContent = "It's a draw!";
+  }
+  document.getElementById('scoreX').textContent = scores.X;
+  document.getElementById('scoreO').textContent = scores.O;
+  document.getElementById('scoreD').textContent = scores.D;
+  render(); // disable remaining cells
+  // re-apply win highlight after re-render
+  if (result.winner) result.line.forEach(idx => boardEl.children[idx].classList.add('win'));
+}
+
+function updateStatus() {
+  if (!gameOver) statusEl.textContent = current + "'s turn";
+}
+
+// Returns {winner, line} or {draw:true} or null
+function evaluate(b) {
+  for (const line of WINS) {
+    const [a, c, d] = line;
+    if (b[a] && b[a] === b[c] && b[a] === b[d]) {
+      return { winner: b[a], line };
+    }
+  }
+  if (b.every(Boolean)) return { draw: true };
+  return null;
+}
+
+// --- Simple unbeatable AI (minimax) playing as O ---
+function aiMove() {
+  const best = minimax(board, 'O');
+  move(best.index);
+}
+
+function minimax(b, player) {
+  const result = evaluate(b);
+  if (result) {
+    if (result.winner === 'O') return { score: 10 };
+    if (result.winner === 'X') return { score: -10 };
+    return { score: 0 };
+  }
+  const moves = [];
+  for (let i = 0; i < 9; i++) {
+    if (!b[i]) {
+      b[i] = player;
+      const r = minimax(b, player === 'O' ? 'X' : 'O');
+      moves.push({ index: i, score: r.score });
+      b[i] = '';
+    }
+  }
+  // O maximizes, X minimizes
+  if (player === 'O') {
+    return moves.reduce((best, m) => (m.score > best.score ? m : best));
+  } else {
+    return moves.reduce((best, m) => (m.score < best.score ? m : best));
+  }
+}
+
+// --- Controls ---
+document.getElementById('reset').addEventListener('click', init);
+document.getElementById('mode2p').addEventListener('click', () => setMode(false));
+document.getElementById('modeAI').addEventListener('click', () => setMode(true));
+
+function setMode(ai) {
+  vsAI = ai;
+  document.getElementById('mode2p').classList.toggle('active', !ai);
+  document.getElementById('modeAI').classList.toggle('active', ai);
+  init();
+}
+
+vsAI = false;
+init();
+</script>
+</body>
+</html>
